@@ -28,26 +28,59 @@ Vagrant.configure("2") do |config|
     ]
   end
 
+  # Based on https://gist.github.com/bullshit/918d74db9473355d7181
   config.vm.provision "shell", inline: <<-SHELL
+    apt update
+    apt install -y --no-install-recommends \
+      build-essential \
+      pkg-config \
+      python-dev \
+      xsltproc
+
+    # TODO sha256sum
+    wget https://sourceforge.net/projects/lirc/files/LIRC/0.10.0/lirc-0.10.0.tar.gz/download -O lirc-0.10.0.tgz
+    tar -zxf lirc-0.10.0.tgz
+    cd lirc-0.10.0
+    ./configure
+
+
+    exit 0 # disable for now
+    set -e
+
+    # enable deb-src
+    sed -i '/^#\sdeb-src /s/^#//' "/etc/apt/sources.list"
     export DEBIAN_FRONTEND=noninteractive # avoid LIRC curses-style config
     apt update
-    apt install -y --no-install-recommends unzip dialog build-essential
+    apt install -y --no-install-recommends \
+      build-essential \
+      packaging-dev \
+      libusb-dev \
+      libasound2-dev \
+      libice-dev \
+      libsm-dev \
+      libx11-dev \
+      libirman-dev \
+      libftdi-dev \
+      dh-autoreconf \
+      portaudio19-dev \
+      libxt-dev \
+      setserial
 
-    rm -rf /tmp/lirc
-    mkdir /tmp/lirc
-    cd /tmp/lirc
-    echo "4c580206e6c64b12a393dc1119a6ad26514d0637fb3d6ab41ab899cf81ad008d USB_transceiver_LIRC.zip" > lirc.sha256
-    wget https://www.irdroid.com/wp-content/uploads/downloads/2017/02/USB_transceiver_LIRC.zip
-    sha256sum --strict -c lirc.sha256
-    unzip USB_transceiver_LIRC.zip
-    
-    cd irtoy
-    chmod +x ./configure *.sh
-    ./configure
-    # Option 3 (TODO)
-    make
-    make install
+    wget https://gist.githubusercontent.com/bullshit/918d74db9473355d7181/raw/568b75813d51c8aaa793a83f448a6184b0d4d5aa/USB-Infrared-Toy-driver.patch
 
-    # update-rc.d lirc defaults
+    apt-get source lirc
+    cd $(find . -maxdepth 1 -type d -name 'lirc*')
+    quilt import ../USB-Infrared-Toy-driver.patch
+    quilt push
+    quilt refresh
+
+    debuild -us -uc
+
+    cd ..
+    find . -name 'liblircclient0_*.deb' -o -name 'lirc_*.deb' | xargs dpkg -i
+
+    apt-mark hold lirc
+
+    # TODO select "Dangerous Prototypes USB Infrared Toy" from list
   SHELL
 end
